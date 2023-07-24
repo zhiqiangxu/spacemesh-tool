@@ -15,6 +15,7 @@ func setupAPP() *cli.App {
 	app.Copyright = "Copyright in 2020"
 	app.Commands = []cli.Command{
 		cmd.AtxCmd,
+		cmd.NiPostCmd,
 	}
 	app.Flags = []cli.Flag{}
 	app.Before = func(context *cli.Context) error {
