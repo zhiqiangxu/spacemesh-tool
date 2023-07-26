@@ -17,6 +17,7 @@ func setupAPP() *cli.App {
 		cmd.AtxCmd,
 		cmd.NiPostCmd,
 		cmd.MerkleCmd,
+		cmd.PocCmd,
 	}
 	app.Flags = []cli.Flag{}
 	app.Before = func(context *cli.Context) error {
