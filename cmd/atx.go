@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/sql"
@@ -21,6 +22,7 @@ var AtxCmd = cli.Command{
 	Subcommands: []cli.Command{
 		atxMetaCmd,
 		atxLoadCmd,
+		atxCoinCmd,
 	},
 }
 
@@ -40,6 +42,15 @@ var atxLoadCmd = cli.Command{
 		flag.NumUnit,
 	},
 	Action: atxLoad,
+}
+
+var atxCoinCmd = cli.Command{
+	Name:  "coin",
+	Usage: "load latest n ATXs per smesher.",
+	Flags: []cli.Flag{
+		flag.PathFlag,
+	},
+	Action: atxCoin,
 }
 
 type PostMetadata struct {
@@ -85,7 +96,7 @@ type CheckpointFmt struct {
 	Coinbase       string
 }
 
-func toCheckpointFmt(checkpoints []atxs.CheckpointAtx) (r []CheckpointFmt) {
+func sliceToCheckpointFmt(checkpoints []atxs.CheckpointAtx) (r []CheckpointFmt) {
 	for _, checkpoint := range checkpoints {
 		r = append(r, CheckpointFmt{
 			ID:             checkpoint.ID.ShortString(),
@@ -117,6 +128,7 @@ func atxLoad(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
+	tx.Release()
 
 	var numUnit uint32
 	for _, checkpoint := range data {
@@ -129,10 +141,71 @@ func atxLoad(ctx *cli.Context) (err error) {
 		return
 	}
 
-	dataBytes, err := json.Marshal(toCheckpointFmt(data))
+	dataBytes, err := json.Marshal(sliceToCheckpointFmt(data))
 	if err != nil {
 		return
 	}
+	fmt.Println(string(dataBytes))
+
+	return
+}
+
+type CoinbaseInfo struct {
+	AddrCount int
+	NumUnit   int
+	Coinbase  string
+}
+
+func atxCoin(ctx *cli.Context) (err error) {
+	sqlDB, err := sql.Open("file:" + ctx.String(flag.PathFlag.Name))
+	if err != nil {
+		return
+	}
+	defer sqlDB.Close()
+	tx, err := sqlDB.Tx(context.Background())
+	if err != nil {
+		return
+	}
+	data, err := atxs.LatestN(tx, 10)
+	if err != nil {
+		return
+	}
+	tx.Release()
+
+	fmt.Fprintf(os.Stderr, "#Smesher:\t%d\n", len(data))
+	info := make(map[string]*CoinbaseInfo)
+	smesherMap := make(map[string]int)
+
+	for _, checkpoint := range data {
+		if smesherMap[checkpoint.SmesherID.ShortString()] == 1 {
+			// dataBytes, _ := json.Marshal(toCheckpointFmt(checkpoint))
+			fmt.Fprintf(os.Stderr, "Dup Smesher:\t%s\n", checkpoint.SmesherID.String())
+		}
+		smesherMap[checkpoint.SmesherID.ShortString()] += 1
+		cb, ok := info[checkpoint.Coinbase.String()]
+		if !ok {
+			cb = &CoinbaseInfo{}
+			info[checkpoint.Coinbase.String()] = cb
+		}
+		cb.AddrCount += 1
+		cb.NumUnit += int(checkpoint.NumUnits)
+	}
+
+	cbs := make([]*CoinbaseInfo, 0)
+	for k, cb := range info {
+		cb.Coinbase = k
+		cbs = append(cbs, cb)
+	}
+
+	sort.Slice(cbs, func(i, j int) bool {
+		return cbs[i].NumUnit > cbs[j].NumUnit
+	})
+
+	dataBytes, err := json.Marshal(cbs)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "#Coinbase:\t%d\n", len(cbs))
 	fmt.Println(string(dataBytes))
 
 	return
