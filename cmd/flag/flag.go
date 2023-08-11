@@ -7,7 +7,17 @@ var PathFlag = cli.StringFlag{
 	Usage: "specify file path",
 }
 
-var NumUnit = cli.BoolFlag{
+var UnitFlag = cli.BoolFlag{
 	Name:  "unit",
 	Usage: "specify num unit",
+}
+
+var NodeFlag = cli.StringFlag{
+	Name:  "node",
+	Usage: "specify node",
+}
+
+var EpochFlag = cli.IntFlag{
+	Name:  "epoch",
+	Usage: "specify epoch",
 }

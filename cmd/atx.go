@@ -23,6 +23,7 @@ var AtxCmd = cli.Command{
 		atxMetaCmd,
 		atxLoadCmd,
 		atxCoinCmd,
+		atxNonceCmd,
 	},
 }
 
@@ -39,7 +40,7 @@ var atxLoadCmd = cli.Command{
 	Usage: "load latest n ATXs per smesher.",
 	Flags: []cli.Flag{
 		flag.PathFlag,
-		flag.NumUnit,
+		flag.UnitFlag,
 	},
 	Action: atxLoad,
 }
@@ -51,6 +52,17 @@ var atxCoinCmd = cli.Command{
 		flag.PathFlag,
 	},
 	Action: atxCoin,
+}
+
+var atxNonceCmd = cli.Command{
+	Name:  "nonce",
+	Usage: "load nonce of atx for a given epoch.",
+	Flags: []cli.Flag{
+		flag.PathFlag,
+		flag.NodeFlag,
+		flag.EpochFlag,
+	},
+	Action: atxNonce,
 }
 
 type PostMetadata struct {
@@ -124,18 +136,18 @@ func atxLoad(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
+	defer tx.Release()
 	data, err := atxs.LatestN(tx, 10)
 	if err != nil {
 		return
 	}
-	tx.Release()
 
 	var numUnit uint32
 	for _, checkpoint := range data {
 		numUnit += checkpoint.NumUnits
 	}
 
-	if ctx.Bool(flag.NumUnit.Name) {
+	if ctx.Bool(flag.UnitFlag.Name) {
 		fmt.Println("numUnit", numUnit)
 		fmt.Println("power(T)", numUnit*64/1024)
 		return
@@ -166,11 +178,11 @@ func atxCoin(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
+	defer tx.Release()
 	data, err := atxs.LatestN(tx, 10)
 	if err != nil {
 		return
 	}
-	tx.Release()
 
 	fmt.Fprintf(os.Stderr, "#Smesher:\t%d\n", len(data))
 	info := make(map[string]*CoinbaseInfo)
@@ -208,5 +220,29 @@ func atxCoin(ctx *cli.Context) (err error) {
 	fmt.Fprintf(os.Stderr, "#Coinbase:\t%d\n", len(cbs))
 	fmt.Println(string(dataBytes))
 
+	return
+}
+
+func atxNonce(ctx *cli.Context) (err error) {
+	node := types.NodeID(types.HexToHash32(ctx.String(flag.NodeFlag.Name)))
+
+	sqlDB, err := sql.Open("file:" + ctx.String(flag.PathFlag.Name))
+	if err != nil {
+		return
+	}
+	defer sqlDB.Close()
+
+	tx, err := sqlDB.Tx(context.Background())
+	if err != nil {
+		return
+	}
+	defer tx.Release()
+
+	nonce, err := atxs.VRFNonce(tx, node, types.EpochID(ctx.Int(flag.EpochFlag.Name)))
+	if err != nil {
+		return
+	}
+
+	fmt.Println("nonce", nonce)
 	return
 }
