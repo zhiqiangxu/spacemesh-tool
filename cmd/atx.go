@@ -24,6 +24,7 @@ var AtxCmd = cli.Command{
 		atxLoadCmd,
 		atxCoinCmd,
 		atxNonceCmd,
+		atxLatestEpochCmd,
 	},
 }
 
@@ -47,7 +48,7 @@ var atxLoadCmd = cli.Command{
 
 var atxCoinCmd = cli.Command{
 	Name:  "coin",
-	Usage: "load latest n ATXs per smesher.",
+	Usage: "load latest ATX per smesher.",
 	Flags: []cli.Flag{
 		flag.PathFlag,
 	},
@@ -63,6 +64,15 @@ var atxNonceCmd = cli.Command{
 		flag.EpochFlag,
 	},
 	Action: atxNonce,
+}
+
+var atxLatestEpochCmd = cli.Command{
+	Name:  "latest_epoch ",
+	Usage: "load latest epoch from atx.",
+	Flags: []cli.Flag{
+		flag.PathFlag,
+	},
+	Action: atxLatestEpoch,
 }
 
 type PostMetadata struct {
@@ -179,9 +189,22 @@ func atxCoin(ctx *cli.Context) (err error) {
 		return
 	}
 	defer tx.Release()
-	data, err := atxs.LatestN(tx, 10)
+	latestEpoch, err := atxs.LatestEpoch(tx)
 	if err != nil {
 		return
+	}
+
+	fmt.Println("latest epoch", latestEpoch)
+
+	latestData, err := atxs.LatestN(tx, 3)
+	if err != nil {
+		return
+	}
+	var data []atxs.CheckpointAtx
+	for _, checkpoint := range latestData {
+		if checkpoint.Epoch == latestEpoch {
+			data = append(data, checkpoint)
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "#Smesher:\t%d\n", len(data))
@@ -244,5 +267,26 @@ func atxNonce(ctx *cli.Context) (err error) {
 	}
 
 	fmt.Println("nonce", nonce)
+	return
+}
+
+func atxLatestEpoch(ctx *cli.Context) (err error) {
+	sqlDB, err := sql.Open("file:" + ctx.String(flag.PathFlag.Name))
+	if err != nil {
+		return
+	}
+	defer sqlDB.Close()
+	tx, err := sqlDB.Tx(context.Background())
+	if err != nil {
+		return
+	}
+	defer tx.Release()
+
+	epoch, err := atxs.LatestEpoch(tx)
+	if err != nil {
+		return
+	}
+
+	fmt.Println("latest epoch", epoch)
 	return
 }
