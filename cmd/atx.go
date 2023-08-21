@@ -147,9 +147,22 @@ func atxLoad(ctx *cli.Context) (err error) {
 		return
 	}
 	defer tx.Release()
-	data, err := atxs.LatestN(tx, 10)
+	latestEpoch, err := atxs.LatestEpoch(tx)
 	if err != nil {
 		return
+	}
+
+	latestData, err := atxs.LatestN(tx, 3)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "latest epoch:\t%d\n", latestEpoch)
+
+	var data []atxs.CheckpointAtx
+	for _, checkpoint := range latestData {
+		if checkpoint.Epoch == latestEpoch {
+			data = append(data, checkpoint)
+		}
 	}
 
 	var numUnit uint32
@@ -194,7 +207,7 @@ func atxCoin(ctx *cli.Context) (err error) {
 		return
 	}
 
-	fmt.Println("latest epoch", latestEpoch)
+	fmt.Fprintf(os.Stderr, "latest epoch:\t%d\n", latestEpoch)
 
 	latestData, err := atxs.LatestN(tx, 3)
 	if err != nil {
